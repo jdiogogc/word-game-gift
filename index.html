@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Five words</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ground: #E8E7EC;
+      --card: #FFFFFF;
+      --text: #22283A;
+      --muted: #6E7183;
+      --hairline: #D2D0D9;
+      --right: #3E7A63;
+      --near: #9A6B2B;
+      --miss: #B9B7C2;
+      --accent: #6B4E71;
+      --tile-size: 3.25rem;
+      --tile-gap: 0.35rem;
+      --focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      min-height: 100svh;
+      background: var(--ground);
+      color: var(--text);
+      font-family: "Archivo", system-ui, sans-serif;
+    }
+
+    body {
+      padding:
+        env(safe-area-inset-top)
+        env(safe-area-inset-right)
+        env(safe-area-inset-bottom)
+        env(safe-area-inset-left);
+    }
+
+    .screen[hidden] { display: none !important; }
+
+    .screen {
+      min-height: 100svh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 1.25rem 1rem 1rem;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--hairline);
+      border-radius: 1rem;
+      width: min(100%, 26rem);
+    }
+
+    /* Opening */
+    #screen-opening {
+      justify-content: center;
+      text-align: center;
+      gap: 2rem;
+    }
+
+    .opening-title {
+      font-family: "Newsreader", Georgia, serif;
+      font-size: clamp(2rem, 8vw, 2.75rem);
+      font-weight: 500;
+      line-height: 1.15;
+      margin: 0;
+    }
+
+    .opening-sub {
+      color: var(--muted);
+      font-size: 1rem;
+      line-height: 1.5;
+      margin: 0.75rem 0 0;
+    }
+
+    /* Play */
+    #screen-play {
+      justify-content: space-between;
+      gap: 0.75rem;
+      width: 100%;
+      max-width: 26rem;
+      margin: 0 auto;
+    }
+
+    .play-header {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.65rem;
+    }
+
+    .progress {
+      display: flex;
+      gap: 0.45rem;
+    }
+
+    .pip {
+      width: 2rem;
+      height: 0.3rem;
+      border-radius: 999px;
+      background: var(--hairline);
+    }
+
+    .pip.is-done { background: var(--accent); opacity: 0.45; }
+    .pip.is-active { background: var(--accent); opacity: 1; }
+
+    .round-meta {
+      color: var(--muted);
+      font-size: 0.875rem;
+    }
+
+    .clue-wrap {
+      width: 100%;
+    }
+
+    .clue {
+      margin: 0;
+      padding: 1rem 1.1rem;
+      background: var(--card);
+      border: 1px solid var(--hairline);
+      border-radius: 0.75rem;
+      font-size: 0.95rem;
+      line-height: 1.45;
+    }
+
+    .play-main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      gap: 0.5rem;
+    }
+
+    .board {
+      --word-len: 5;
+      display: flex;
+      flex-direction: column;
+      gap: var(--tile-gap);
+      width: 100%;
+      max-width: calc(var(--word-len) * var(--tile-size) + (var(--word-len) - 1) * var(--tile-gap));
+    }
+
+    .board--long { --tile-size: 2.65rem; }
+    .board--extra-long { --tile-size: 2.25rem; }
+
+    .board-row {
+      display: grid;
+      grid-template-columns: repeat(var(--word-len), 1fr);
+      gap: var(--tile-gap);
+    }
+
+    .board-row.is-shaking {
+      animation: shake 0.45s ease;
+    }
+
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      20% { transform: translateX(-6px); }
+      40% { transform: translateX(6px); }
+      60% { transform: translateX(-4px); }
+      80% { transform: translateX(4px); }
+    }
+
+    .tile {
+      aspect-ratio: 1;
+      border: 2px solid var(--hairline);
+      border-radius: 0.35rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: calc(var(--tile-size) * 0.46);
+      font-weight: 600;
+      text-transform: uppercase;
+      background: var(--card);
+      color: var(--text);
+      transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
+    }
+
+    .tile.is-filled { border-color: color-mix(in srgb, var(--text) 25%, var(--hairline)); }
+
+    .tile.is-right,
+    .tile.is-near,
+    .tile.is-miss {
+      border-color: transparent;
+      color: #fff;
+    }
+
+    .tile.is-right { background: var(--right); }
+    .tile.is-near { background: var(--near); }
+    .tile.is-miss { background: var(--miss); }
+
+    .tile.is-reveal {
+      animation: tileFlip 0.35s ease forwards;
+    }
+
+    @keyframes tileFlip {
+      0% { transform: scaleY(1); }
+      50% { transform: scaleY(0); }
+      100% { transform: scaleY(1); }
+    }
+
+    .length-hint {
+      min-height: 1.25rem;
+      margin: 0;
+      font-size: 0.8rem;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .length-hint.is-visible { color: var(--accent); }
+
+    /* Keyboard */
+    .keyboard {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      touch-action: manipulation;
+    }
+
+    .kb-row {
+      display: flex;
+      justify-content: center;
+      gap: 0.3rem;
+    }
+
+    .kb-key {
+      min-height: 2.75rem;
+      min-width: 2rem;
+      flex: 1;
+      max-width: 2.4rem;
+      border: none;
+      border-radius: 0.35rem;
+      background: var(--card);
+      border: 1px solid var(--hairline);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    .kb-key--wide {
+      flex: 1.4;
+      max-width: 3.4rem;
+      font-size: 0.72rem;
+      font-weight: 500;
+    }
+
+    .kb-key.is-right { background: var(--right); border-color: var(--right); color: #fff; }
+    .kb-key.is-near { background: var(--near); border-color: var(--near); color: #fff; }
+    .kb-key.is-miss { background: var(--miss); border-color: var(--miss); color: #fff; }
+
+    .kb-key:focus-visible,
+    .btn:focus-visible {
+      outline: none;
+      box-shadow: var(--focus-ring);
+    }
+
+    /* Note */
+    #screen-note {
+      justify-content: center;
+      gap: 1.5rem;
+      text-align: center;
+    }
+
+    .note-word {
+      display: flex;
+      justify-content: center;
+      gap: var(--tile-gap);
+      flex-wrap: wrap;
+    }
+
+    .note-word .tile {
+      width: var(--tile-size);
+      height: var(--tile-size);
+      font-size: calc(var(--tile-size) * 0.46);
+    }
+
+    .note-meta {
+      color: var(--muted);
+      font-size: 0.9rem;
+      margin: 0;
+    }
+
+    .note-text {
+      font-family: "Newsreader", Georgia, serif;
+      font-size: clamp(1.25rem, 5vw, 1.55rem);
+      line-height: 1.65;
+      margin: 0;
+      max-width: 22rem;
+    }
+
+    /* End */
+    #screen-end {
+      justify-content: flex-start;
+      gap: 1.5rem;
+      text-align: center;
+    }
+
+    .closing-title {
+      font-family: "Newsreader", Georgia, serif;
+      font-size: clamp(1.75rem, 6vw, 2.25rem);
+      font-weight: 500;
+      line-height: 1.2;
+      margin: 0;
+    }
+
+    .closing-body {
+      font-family: "Newsreader", Georgia, serif;
+      font-size: clamp(1.1rem, 4.5vw, 1.35rem);
+      line-height: 1.65;
+      margin: 0;
+      max-width: 22rem;
+    }
+
+    .closing-body + .closing-body { margin-top: 1rem; }
+
+    .recap {
+      width: min(100%, 22rem);
+      text-align: left;
+      margin: 0.5rem auto 0;
+      padding: 0;
+      list-style: none;
+      border-top: 1px solid var(--hairline);
+    }
+
+    .recap li {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.75rem 0;
+      border-bottom: 1px solid var(--hairline);
+      font-size: 0.9rem;
+    }
+
+    .recap-word {
+      font-weight: 600;
+      letter-spacing: 0.04em;
+    }
+
+    .recap-detail { color: var(--muted); }
+
+    .btn {
+      appearance: none;
+      border: none;
+      border-radius: 999px;
+      background: var(--accent);
+      color: #fff;
+      font-family: inherit;
+      font-size: 0.95rem;
+      font-weight: 500;
+      padding: 0.85rem 1.75rem;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    @media (max-width: 360px) {
+      :root { --tile-size: 2.85rem; }
+      .board--long { --tile-size: 2.35rem; }
+      .board--extra-long { --tile-size: 2rem; }
+      .kb-key { min-height: 2.65rem; font-size: 0.8rem; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .board-row.is-shaking { animation: none; }
+      .tile { transition: none; }
+      .tile.is-reveal { animation: none; }
+    }
+
+    /* Phase 1 test output (hidden in normal play) */
+    #test-output {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      max-height: 40vh;
+      overflow: auto;
+      background: #111;
+      color: #0f0;
+      font: 12px/1.4 monospace;
+      padding: 0.5rem;
+      white-space: pre-wrap;
+      z-index: 9999;
+    }
+
+    #test-output[hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+
+  <!-- Opening -->
+  <section id="screen-opening" class="screen">
+    <div>
+      <h1 class="opening-title">Five words</h1>
+      <p class="opening-sub">A small game, just for you.</p>
+    </div>
+    <button type="button" class="btn" id="btn-start">Start</button>
+  </section>
+
+  <!-- Play -->
+  <section id="screen-play" class="screen" hidden>
+    <header class="play-header">
+      <div class="progress" id="progress" aria-hidden="true"></div>
+      <p class="round-meta" id="round-meta"></p>
+    </header>
+
+    <div class="clue-wrap">
+      <p class="clue" id="clue"></p>
+    </div>
+
+    <div class="play-main">
+      <div class="board" id="board" aria-label="Guess board"></div>
+      <p class="length-hint" id="length-hint" aria-live="polite"></p>
+    </div>
+
+    <div class="keyboard" id="keyboard" aria-label="On-screen keyboard"></div>
+  </section>
+
+  <!-- Note -->
+  <section id="screen-note" class="screen" hidden>
+    <div class="note-word" id="note-word" aria-hidden="true"></div>
+    <p class="note-meta" id="note-meta"></p>
+    <p class="note-text" id="note-text"></p>
+    <button type="button" class="btn" id="btn-next">Next</button>
+  </section>
+
+  <!-- End -->
+  <section id="screen-end" class="screen" hidden>
+    <h2 class="closing-title" id="closing-title"></h2>
+    <div id="closing-body"></div>
+    <ul class="recap" id="recap"></ul>
+  </section>
+
+  <pre id="test-output" hidden></pre>
+
+  <script>
+    // ─── Content — edit here only ───
+    const ROUNDS = [
+      { answer: "BRAVE", clue: "What you were on the day we met.", note: "You walked in like you already belonged there." },
+      { answer: "PARIS", clue: "Where we got lost on purpose.", note: "Every wrong turn was the right one that week." },
+      { answer: "FOUR", clue: "How many years we've been at this.", note: "Still counting, still choosing each other." },
+      { answer: "MUSIC", clue: "The thing playing when you said yes.", note: "I hear that song differently now." },
+      { answer: "HOME", clue: "What you are to me.", note: "" },
+    ];
+
+    const CLOSING = {
+      title: "Thank you for playing",
+      body: [
+        "These five words barely cover it, but they were the ones I kept coming back to.",
+        "Here's to many more rounds — the easy ones and the hard ones — together.",
+      ],
+    };
+
+    const GUESSES = 6;
+
+    // ─── Game logic ───
+
+    const RESULT_RANK = { miss: 0, near: 1, right: 2 };
+
+    function normalizeWord(word) {
+      return String(word).toUpperCase().replace(/[^A-Z]/g, "");
+    }
+
+    ROUNDS.forEach((round) => {
+      round.answer = normalizeWord(round.answer);
+    });
+
+    function scoreGuess(guess, answer) {
+      const len = answer.length;
+      const results = new Array(len);
+      const remaining = [];
+
+      for (let i = 0; i < len; i += 1) {
+        if (guess[i] === answer[i]) {
+          results[i] = "right";
+        } else {
+          remaining.push(answer[i]);
+        }
+      }
+
+      for (let i = 0; i < len; i += 1) {
+        if (results[i]) continue;
+        const letter = guess[i];
+        const poolIndex = remaining.indexOf(letter);
+        if (poolIndex !== -1) {
+          results[i] = "near";
+          remaining.splice(poolIndex, 1);
+        } else {
+          results[i] = "miss";
+        }
+      }
+
+      return results;
+    }
+
+    function arraysEqual(a, b) {
+      return a.length === b.length && a.every((v, i) => v === b[i]);
+    }
+
+    function runTests() {
+      const cases = [
+        {
+          name: "SPEED vs ERASE (duplicate near)",
+          guess: "SPEED",
+          answer: "ERASE",
+          expected: ["near", "miss", "near", "near", "miss"],
+        },
+        {
+          name: "ALLEY vs LABEL (classic dupes)",
+          guess: "ALLEY",
+          answer: "LABEL",
+          expected: ["near", "near", "near", "right", "miss"],
+        },
+        {
+          name: "ABBEY vs BOBBY (repeated answer letter)",
+          guess: "ABBEY",
+          answer: "BOBBY",
+          expected: ["miss", "near", "right", "miss", "right"],
+        },
+      ];
+
+      const lines = [];
+      let passed = 0;
+
+      cases.forEach(({ name, guess, answer, expected }) => {
+        const result = scoreGuess(guess, answer);
+        const ok = arraysEqual(result, expected) && result.length === answer.length;
+        if (ok) passed += 1;
+        lines.push(`${ok ? "PASS" : "FAIL"}  ${name}`);
+        lines.push(`  guess:    ${guess}`);
+        lines.push(`  answer:   ${answer}`);
+        lines.push(`  expected: ${expected.join(", ")}`);
+        lines.push(`  got:      ${result.join(", ")}`);
+        lines.push("");
+      });
+
+      const normOk = normalizeWord("  hello-World!  ") === "HELLOWORLD";
+      lines.push(`${normOk ? "PASS" : "FAIL"}  normalizeWord strips non-letters and uppercases`);
+      if (normOk) passed += 1;
+
+      lines.unshift(`Scoring tests: ${passed}/${cases.length + 1} passed\n`);
+      return { lines, passed, total: cases.length + 1 };
+    }
+
+    // ─── DOM refs ───
+    const screens = {
+      opening: document.getElementById("screen-opening"),
+      play: document.getElementById("screen-play"),
+      note: document.getElementById("screen-note"),
+      end: document.getElementById("screen-end"),
+    };
+
+    const els = {
+      btnStart: document.getElementById("btn-start"),
+      btnNext: document.getElementById("btn-next"),
+      progress: document.getElementById("progress"),
+      roundMeta: document.getElementById("round-meta"),
+      clue: document.getElementById("clue"),
+      board: document.getElementById("board"),
+      lengthHint: document.getElementById("length-hint"),
+      keyboard: document.getElementById("keyboard"),
+      noteWord: document.getElementById("note-word"),
+      noteMeta: document.getElementById("note-meta"),
+      noteText: document.getElementById("note-text"),
+      closingTitle: document.getElementById("closing-title"),
+      closingBody: document.getElementById("closing-body"),
+      recap: document.getElementById("recap"),
+      testOutput: document.getElementById("test-output"),
+    };
+
+    const KB_ROWS = [
+      ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
+      ["A", "S", "D", "F", "G", "H", "J", "K", "L"],
+      ["Enter", "Z", "X", "C", "V", "B", "N", "M", "⌫"],
+    ];
+
+    let roundIndex = 0;
+    let guessCount = 0;
+    let currentGuess = "";
+    let keyStates = {};
+    let recap = [];
+    let roundEnding = false;
+    let lastRoundWasRevealed = false;
+
+    function showScreen(name) {
+      Object.values(screens).forEach((el) => { el.hidden = true; });
+      screens[name].hidden = false;
+    }
+
+    function currentRound() {
+      return ROUNDS[roundIndex];
+    }
+
+    function answerLength() {
+      return currentRound().answer.length;
+    }
+
+    function buildProgress() {
+      els.progress.innerHTML = "";
+      ROUNDS.forEach((_, i) => {
+        const pip = document.createElement("span");
+        pip.className = "pip";
+        if (i < roundIndex) pip.classList.add("is-done");
+        if (i === roundIndex) pip.classList.add("is-active");
+        els.progress.appendChild(pip);
+      });
+    }
+
+    function boardSizeClass(len) {
+      if (len >= 7) return "board--extra-long";
+      if (len >= 6) return "board--long";
+      return "";
+    }
+
+    function buildBoard() {
+      const len = answerLength();
+      els.board.style.setProperty("--word-len", len);
+      els.board.className = "board " + boardSizeClass(len);
+      els.board.innerHTML = "";
+
+      for (let r = 0; r < GUESSES; r += 1) {
+        const row = document.createElement("div");
+        row.className = "board-row";
+        row.dataset.row = r;
+        for (let c = 0; c < len; c += 1) {
+          const tile = document.createElement("div");
+          tile.className = "tile";
+          tile.dataset.col = c;
+          row.appendChild(tile);
+        }
+        els.board.appendChild(row);
+      }
+    }
+
+    function buildKeyboard() {
+      els.keyboard.innerHTML = "";
+      KB_ROWS.forEach((row) => {
+        const rowEl = document.createElement("div");
+        rowEl.className = "kb-row";
+        row.forEach((key) => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "kb-key";
+          btn.textContent = key === "Enter" ? "Enter" : key;
+          btn.dataset.key = key;
+          if (key === "Enter" || key === "⌫") btn.classList.add("kb-key--wide");
+          btn.addEventListener("click", () => handleKeyPress(key));
+          rowEl.appendChild(btn);
+        });
+        els.keyboard.appendChild(rowEl);
+      });
+    }
+
+    function resetKeyStates() {
+      keyStates = {};
+      els.keyboard.querySelectorAll(".kb-key").forEach((btn) => {
+        btn.classList.remove("is-right", "is-near", "is-miss");
+      });
+    }
+
+    function updateKeyState(letter, result) {
+      const prev = keyStates[letter];
+      if (prev && RESULT_RANK[prev] >= RESULT_RANK[result]) return;
+      keyStates[letter] = result;
+      const btn = els.keyboard.querySelector(`.kb-key[data-key="${letter}"]`);
+      if (!btn) return;
+      btn.classList.remove("is-right", "is-near", "is-miss");
+      btn.classList.add(`is-${result}`);
+    }
+
+    function getRowEl(index) {
+      return els.board.querySelector(`.board-row[data-row="${index}"]`);
+    }
+
+    function renderCurrentRow() {
+      const row = getRowEl(guessCount);
+      if (!row) return;
+      const tiles = row.querySelectorAll(".tile");
+      tiles.forEach((tile, i) => {
+        const letter = currentGuess[i] || "";
+        tile.textContent = letter;
+        tile.classList.toggle("is-filled", Boolean(letter));
+        tile.classList.remove("is-right", "is-near", "is-miss", "is-reveal");
+      });
+    }
+
+    function clearLengthHint() {
+      els.lengthHint.textContent = "";
+      els.lengthHint.classList.remove("is-visible");
+    }
+
+    function showLengthHint() {
+      const len = answerLength();
+      els.lengthHint.textContent = `${len} letters required`;
+      els.lengthHint.classList.add("is-visible");
+      const row = getRowEl(guessCount);
+      if (row) {
+        row.classList.remove("is-shaking");
+        void row.offsetWidth;
+        row.classList.add("is-shaking");
+      }
+    }
+
+    function paintRow(rowEl, guess, results, animate) {
+      const tiles = rowEl.querySelectorAll(".tile");
+      const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+      tiles.forEach((tile, i) => {
+        tile.textContent = guess[i];
+        tile.classList.add("is-filled");
+        tile.classList.remove("is-right", "is-near", "is-miss", "is-reveal");
+
+        const apply = () => {
+          tile.classList.add(`is-${results[i]}`);
+        };
+
+        if (animate && !reduced) {
+          tile.style.transitionDelay = `${i * 90}ms`;
+          tile.classList.add("is-reveal");
+          setTimeout(apply, i * 90 + 120);
+        } else {
+          tile.style.transitionDelay = "0ms";
+          apply();
+        }
+      });
+    }
+
+    function handleKeyPress(key) {
+      if (roundEnding) return;
+      const len = answerLength();
+
+      if (key === "⌫") {
+        currentGuess = currentGuess.slice(0, -1);
+        clearLengthHint();
+        renderCurrentRow();
+        return;
+      }
+
+      if (key === "Enter") {
+        submitGuess();
+        return;
+      }
+
+      if (/^[A-Z]$/.test(key) && currentGuess.length < len) {
+        currentGuess += key;
+        clearLengthHint();
+        renderCurrentRow();
+      }
+    }
+
+    function submitGuess() {
+      const round = currentRound();
+      const len = round.answer.length;
+
+      if (currentGuess.length < len) {
+        showLengthHint();
+        return;
+      }
+
+      clearLengthHint();
+      const results = scoreGuess(currentGuess, round.answer);
+      const row = getRowEl(guessCount);
+
+      results.forEach((res, i) => updateKeyState(currentGuess[i], res));
+
+      const solved = currentGuess === round.answer;
+      const isLastGuess = guessCount + 1 >= GUESSES;
+      roundEnding = solved || isLastGuess;
+
+      paintRow(row, currentGuess, results, roundEnding);
+
+      if (roundEnding) {
+        lastRoundWasRevealed = !solved;
+        const delay = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? 100
+          : len * 90 + 450;
+
+        setTimeout(() => finishRound(solved), delay);
+      } else {
+        guessCount += 1;
+        currentGuess = "";
+      }
+    }
+
+    function finishRound(solved) {
+      const round = currentRound();
+      const count = solved ? guessCount + 1 : GUESSES;
+
+      recap.push({
+        word: round.answer,
+        guessCount: count,
+        wasRevealed: !solved,
+      });
+
+      showNoteScreen(round, count, solved);
+      roundEnding = false;
+    }
+
+    function showNoteScreen(round, count, solved) {
+      const len = round.answer.length;
+      const tileSize = len >= 7 ? "2.25rem" : len >= 6 ? "2.65rem" : "3.25rem";
+      els.noteWord.style.setProperty("--tile-size", tileSize);
+      els.noteWord.innerHTML = "";
+
+      const displayWord = solved ? currentGuess : round.answer;
+      const displayResults = solved
+        ? scoreGuess(displayWord, round.answer)
+        : new Array(len).fill("right");
+
+      displayWord.split("").forEach((letter, i) => {
+        const tile = document.createElement("div");
+        tile.className = `tile is-${displayResults[i]}`;
+        tile.textContent = letter;
+        els.noteWord.appendChild(tile);
+      });
+
+      if (solved) {
+        els.noteMeta.textContent = count === 1 ? "1 guess" : `${count} guesses`;
+      } else {
+        els.noteMeta.textContent = "Revealed after 6 guesses";
+      }
+
+      if (round.note) {
+        els.noteText.textContent = round.note;
+        els.noteText.hidden = false;
+      } else {
+        els.noteText.textContent = "";
+        els.noteText.hidden = true;
+      }
+
+      showScreen("note");
+    }
+
+    function startRound() {
+      const round = currentRound();
+      guessCount = 0;
+      currentGuess = "";
+      roundEnding = false;
+      lastRoundWasRevealed = false;
+      clearLengthHint();
+      resetKeyStates();
+      buildProgress();
+      buildBoard();
+      els.roundMeta.textContent = `Round ${roundIndex + 1} · ${round.answer.length} letters`;
+      els.clue.textContent = round.clue;
+      renderCurrentRow();
+      showScreen("play");
+    }
+
+    function startGame() {
+      roundIndex = 0;
+      recap = [];
+      startRound();
+    }
+
+    function showEndScreen() {
+      els.closingTitle.textContent = CLOSING.title;
+      els.closingBody.innerHTML = "";
+      CLOSING.body.forEach((paragraph) => {
+        const p = document.createElement("p");
+        p.className = "closing-body";
+        p.textContent = paragraph;
+        els.closingBody.appendChild(p);
+      });
+
+      els.recap.innerHTML = "";
+      recap.forEach((entry) => {
+        const li = document.createElement("li");
+        const detail = entry.wasRevealed
+          ? "Revealed"
+          : entry.guessCount === 1
+            ? "1 guess"
+            : `${entry.guessCount} guesses`;
+        li.innerHTML = `<span class="recap-word">${entry.word}</span><span class="recap-detail">${detail}</span>`;
+        els.recap.appendChild(li);
+      });
+
+      showScreen("end");
+    }
+
+    function nextFromNote() {
+      const round = currentRound();
+      const isLastRound = roundIndex >= ROUNDS.length - 1;
+
+      if (isLastRound && !round.note) {
+        showEndScreen();
+        return;
+      }
+
+      if (isLastRound) {
+        showEndScreen();
+        return;
+      }
+
+      roundIndex += 1;
+      startRound();
+    }
+
+    // ─── Init ───
+    els.btnStart.addEventListener("click", startGame);
+    els.btnNext.addEventListener("click", nextFromNote);
+    buildKeyboard();
+
+    document.addEventListener("keydown", (e) => {
+      if (screens.play.hidden) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+      if (e.key === "Enter") {
+        e.preventDefault();
+        handleKeyPress("Enter");
+      } else if (e.key === "Backspace") {
+        e.preventDefault();
+        handleKeyPress("⌫");
+      } else if (/^[a-zA-Z]$/.test(e.key)) {
+        e.preventDefault();
+        handleKeyPress(e.key.toUpperCase());
+      }
+    });
+
+    const testResult = runTests();
+    console.log(testResult.lines.join("\n"));
+
+    if (new URLSearchParams(location.search).has("test")) {
+      els.testOutput.hidden = false;
+      els.testOutput.textContent = testResult.lines.join("\n");
+    }
+  </script>
+</body>
+</html>
