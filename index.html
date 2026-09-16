@@ -632,6 +632,42 @@
       padding: 0.55rem 0.9rem;
       cursor: pointer;
     }
+
+    .edit-section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .edit-section-header .edit-section-title {
+      margin: 0;
+    }
+
+    .edit-round-remove {
+      appearance: none;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      font-family: inherit;
+      font-size: 0.8rem;
+      font-weight: 500;
+      padding: 0.25rem 0;
+      cursor: pointer;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    .edit-round-remove:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+      text-decoration: none;
+    }
+
+    .edit-add-round {
+      width: 100%;
+    }
   </style>
 </head>
 <body>
@@ -686,6 +722,8 @@
 
     <form class="edit-form" id="edit-form" novalidate>
       <div id="edit-rounds"></div>
+
+      <button type="button" class="btn btn--ghost edit-add-round" id="btn-add-round">Add another word</button>
 
       <div class="edit-section">
         <h3 class="edit-section-title">Last message</h3>
@@ -967,6 +1005,7 @@
       btnEdit: document.getElementById("btn-edit"),
       btnEditBack: document.getElementById("btn-edit-back"),
       btnEditReset: document.getElementById("btn-edit-reset"),
+      btnAddRound: document.getElementById("btn-add-round"),
       editForm: document.getElementById("edit-form"),
       editRounds: document.getElementById("edit-rounds"),
       editClosingTitle: document.getElementById("edit-closing-title"),
@@ -990,6 +1029,8 @@
     };
 
     let editImages = [];
+    let editDraftRounds = [];
+    const MAX_ROUNDS = 10;
 
     const KB_ROWS = [
       ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
@@ -1389,17 +1430,69 @@
       }
     }
 
+    function syncEditDraftFromForm() {
+      editDraftRounds = editDraftRounds.map((_, i) => {
+        const answerEl = document.getElementById(`edit-answer-${i}`);
+        const clueEl = document.getElementById(`edit-clue-${i}`);
+        const noteEl = document.getElementById(`edit-note-${i}`);
+        if (!answerEl || !clueEl || !noteEl) {
+          return {
+            ...editDraftRounds[i],
+            backgroundImage: editImages[i] || "",
+          };
+        }
+        return {
+          answer: normalizeWord(answerEl.value),
+          clue: clueEl.value.trim(),
+          note: noteEl.value.trim(),
+          backgroundImage: editImages[i] || "",
+        };
+      });
+    }
+
+    function removeEditRound(index) {
+      if (editDraftRounds.length <= 1) return;
+      syncEditDraftFromForm();
+      editDraftRounds.splice(index, 1);
+      editImages.splice(index, 1);
+      buildEditForm();
+    }
+
+    function addEditRound() {
+      syncEditDraftFromForm();
+      if (editDraftRounds.length >= MAX_ROUNDS) {
+        showEditError(`You can add up to ${MAX_ROUNDS} words.`);
+        return;
+      }
+      editDraftRounds.push({ answer: "", clue: "", note: "", backgroundImage: "" });
+      editImages.push("");
+      els.editError.hidden = true;
+      buildEditForm();
+    }
+
     function buildEditForm() {
-      editImages = ROUNDS.map((round) => round.backgroundImage || "");
       els.editRounds.innerHTML = "";
-      ROUNDS.forEach((round, i) => {
+      editDraftRounds.forEach((round, i) => {
         const section = document.createElement("div");
         section.className = "edit-section";
+
+        const header = document.createElement("div");
+        header.className = "edit-section-header";
 
         const heading = document.createElement("h3");
         heading.className = "edit-section-title";
         heading.textContent = `Round ${i + 1}`;
-        section.appendChild(heading);
+        header.appendChild(heading);
+
+        const removeRoundBtn = document.createElement("button");
+        removeRoundBtn.type = "button";
+        removeRoundBtn.className = "edit-round-remove";
+        removeRoundBtn.textContent = "Remove";
+        removeRoundBtn.disabled = editDraftRounds.length <= 1;
+        removeRoundBtn.addEventListener("click", () => removeEditRound(i));
+        header.appendChild(removeRoundBtn);
+
+        section.appendChild(header);
 
         const answer = document.createElement("input");
         answer.className = "edit-input edit-input--word";
@@ -1482,6 +1575,7 @@
 
       els.editClosingTitle.value = CLOSING.title;
       els.editClosingBody.value = bodyToTextarea(CLOSING.body);
+      els.btnAddRound.disabled = editDraftRounds.length >= MAX_ROUNDS;
       els.editError.hidden = true;
       els.editError.textContent = "";
     }
@@ -1492,6 +1586,13 @@
     }
 
     function openEditScreen() {
+      editDraftRounds = ROUNDS.map((round) => ({
+        answer: round.answer,
+        clue: round.clue,
+        note: round.note,
+        backgroundImage: round.backgroundImage || "",
+      }));
+      editImages = editDraftRounds.map((round) => round.backgroundImage || "");
       buildEditForm();
       showScreen("edit");
     }
@@ -1503,17 +1604,13 @@
     }
 
     function readEditForm() {
-      const rounds = ROUNDS.map((_, i) => {
-        const answer = normalizeWord(document.getElementById(`edit-answer-${i}`).value);
-        const clue = document.getElementById(`edit-clue-${i}`).value.trim();
-        const note = document.getElementById(`edit-note-${i}`).value.trim();
-        return {
-          answer,
-          clue,
-          note,
-          backgroundImage: editImages[i] || "",
-        };
-      });
+      syncEditDraftFromForm();
+      const rounds = editDraftRounds.map((round, i) => ({
+        answer: round.answer,
+        clue: round.clue,
+        note: round.note,
+        backgroundImage: editImages[i] || "",
+      }));
 
       const closing = {
         title: els.editClosingTitle.value.trim(),
@@ -1524,6 +1621,9 @@
     }
 
     function validateContent({ rounds, closing }) {
+      if (!rounds.length) {
+        return "Add at least one word.";
+      }
       for (let i = 0; i < rounds.length; i += 1) {
         const { answer, clue } = rounds[i];
         if (!answer || answer.length < 2) {
@@ -1570,6 +1670,13 @@
         normalizeRounds(cloneContent(DEFAULT_ROUNDS, DEFAULT_CLOSING).rounds),
         cloneContent(DEFAULT_ROUNDS, DEFAULT_CLOSING).closing,
       );
+      editDraftRounds = ROUNDS.map((round) => ({
+        answer: round.answer,
+        clue: round.clue,
+        note: round.note,
+        backgroundImage: round.backgroundImage || "",
+      }));
+      editImages = editDraftRounds.map((round) => round.backgroundImage || "");
       buildEditForm();
     }
 
@@ -1578,6 +1685,7 @@
     els.btnEdit.addEventListener("click", openEditScreen);
     els.btnEditBack.addEventListener("click", () => showScreen("opening"));
     els.btnEditReset.addEventListener("click", handleEditReset);
+    els.btnAddRound.addEventListener("click", addEditRound);
     els.editForm.addEventListener("submit", handleEditSave);
     els.btnNext.addEventListener("click", nextFromNote);
     buildKeyboard();
