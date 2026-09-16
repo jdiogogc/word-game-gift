@@ -396,6 +396,137 @@
     }
 
     #test-output[hidden] { display: none !important; }
+
+    /* Edit */
+    #screen-edit {
+      justify-content: flex-start;
+      gap: 1rem;
+      width: 100%;
+      max-width: 26rem;
+      margin: 0 auto;
+    }
+
+    .edit-header {
+      width: 100%;
+      text-align: center;
+    }
+
+    .edit-title {
+      font-family: "Newsreader", Georgia, serif;
+      font-size: clamp(1.5rem, 5vw, 1.85rem);
+      font-weight: 500;
+      margin: 0;
+    }
+
+    .edit-sub {
+      color: var(--muted);
+      font-size: 0.875rem;
+      margin: 0.5rem 0 0;
+    }
+
+    .edit-form {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    .edit-section {
+      background: var(--card);
+      border: 1px solid var(--hairline);
+      border-radius: 0.75rem;
+      padding: 1rem;
+    }
+
+    .edit-section-title {
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin: 0 0 0.75rem;
+    }
+
+    .edit-field {
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .edit-field:last-child { margin-bottom: 0; }
+
+    .edit-label {
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--text);
+    }
+
+    .edit-input,
+    .edit-textarea {
+      width: 100%;
+      padding: 0.6rem 0.75rem;
+      border: 1px solid var(--hairline);
+      border-radius: 0.5rem;
+      font-family: inherit;
+      font-size: 0.9rem;
+      color: var(--text);
+      background: var(--ground);
+    }
+
+    .edit-input:focus,
+    .edit-textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: var(--focus-ring);
+    }
+
+    .edit-textarea {
+      resize: vertical;
+      min-height: 3.5rem;
+      line-height: 1.45;
+    }
+
+    .edit-input--word {
+      text-transform: uppercase;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+    }
+
+    .edit-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+      width: 100%;
+      padding-bottom: 0.5rem;
+    }
+
+    .btn--ghost {
+      background: transparent;
+      color: var(--accent);
+      border: 1px solid var(--hairline);
+    }
+
+    .btn--text {
+      background: transparent;
+      color: var(--muted);
+      font-size: 0.85rem;
+      padding: 0.5rem;
+    }
+
+    .edit-error {
+      color: #9b2c2c;
+      font-size: 0.85rem;
+      margin: 0;
+      text-align: center;
+    }
+
+    .opening-actions {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.75rem;
+    }
   </style>
 </head>
 <body>
@@ -406,7 +537,10 @@
       <h1 class="opening-title">Five words</h1>
       <p class="opening-sub">A small game, just for you.</p>
     </div>
-    <button type="button" class="btn" id="btn-start">Start</button>
+    <div class="opening-actions">
+      <button type="button" class="btn" id="btn-start">Start</button>
+      <button type="button" class="btn btn--text" id="btn-edit">Edit words &amp; messages</button>
+    </div>
   </section>
 
   <!-- Play -->
@@ -436,6 +570,38 @@
     <button type="button" class="btn" id="btn-next">Next</button>
   </section>
 
+  <!-- Edit -->
+  <section id="screen-edit" class="screen" hidden>
+    <header class="edit-header">
+      <h2 class="edit-title">Edit content</h2>
+      <p class="edit-sub">Changes are saved on this device.</p>
+    </header>
+
+    <form class="edit-form" id="edit-form" novalidate>
+      <div id="edit-rounds"></div>
+
+      <div class="edit-section">
+        <h3 class="edit-section-title">Last message</h3>
+        <div class="edit-field">
+          <label class="edit-label" for="edit-closing-title">Title</label>
+          <input class="edit-input" type="text" id="edit-closing-title" autocomplete="off">
+        </div>
+        <div class="edit-field">
+          <label class="edit-label" for="edit-closing-body">Message</label>
+          <textarea class="edit-textarea" id="edit-closing-body" rows="4" placeholder="Separate paragraphs with a blank line"></textarea>
+        </div>
+      </div>
+
+      <p class="edit-error" id="edit-error" hidden></p>
+
+      <div class="edit-actions">
+        <button type="submit" class="btn">Save changes</button>
+        <button type="button" class="btn btn--ghost" id="btn-edit-back">Back</button>
+        <button type="button" class="btn btn--text" id="btn-edit-reset">Reset to defaults</button>
+      </div>
+    </form>
+  </section>
+
   <!-- End -->
   <section id="screen-end" class="screen" hidden>
     <h2 class="closing-title" id="closing-title"></h2>
@@ -446,8 +612,8 @@
   <pre id="test-output" hidden></pre>
 
   <script>
-    // ─── Content — edit here only ───
-    const ROUNDS = [
+    // ─── Content defaults ───
+    const DEFAULT_ROUNDS = [
       { answer: "BRAVE", clue: "What you were on the day we met.", note: "You walked in like you already belonged there." },
       { answer: "PARIS", clue: "Where we got lost on purpose.", note: "Every wrong turn was the right one that week." },
       { answer: "FOUR", clue: "How many years we've been at this.", note: "Still counting, still choosing each other." },
@@ -455,7 +621,7 @@
       { answer: "HOME", clue: "What you are to me.", note: "" },
     ];
 
-    const CLOSING = {
+    const DEFAULT_CLOSING = {
       title: "Thank you for playing",
       body: [
         "These five words barely cover it, but they were the ones I kept coming back to.",
@@ -463,6 +629,7 @@
       ],
     };
 
+    const STORAGE_KEY = "five-words-content";
     const GUESSES = 6;
 
     // ─── Game logic ───
@@ -473,9 +640,52 @@
       return String(word).toUpperCase().replace(/[^A-Z]/g, "");
     }
 
-    ROUNDS.forEach((round) => {
-      round.answer = normalizeWord(round.answer);
-    });
+    function cloneContent(rounds, closing) {
+      return {
+        rounds: rounds.map((r) => ({ answer: r.answer, clue: r.clue, note: r.note })),
+        closing: {
+          title: closing.title,
+          body: [...closing.body],
+        },
+      };
+    }
+
+    function normalizeRounds(rounds) {
+      return rounds.map((round) => ({
+        ...round,
+        answer: normalizeWord(round.answer),
+      }));
+    }
+
+    function loadContent() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return cloneContent(DEFAULT_ROUNDS, DEFAULT_CLOSING);
+        const saved = JSON.parse(raw);
+        if (!Array.isArray(saved.rounds) || !saved.closing) {
+          return cloneContent(DEFAULT_ROUNDS, DEFAULT_CLOSING);
+        }
+        return {
+          rounds: normalizeRounds(saved.rounds),
+          closing: {
+            title: String(saved.closing.title || DEFAULT_CLOSING.title),
+            body: Array.isArray(saved.closing.body) && saved.closing.body.length
+              ? saved.closing.body.map(String)
+              : [...DEFAULT_CLOSING.body],
+          },
+        };
+      } catch {
+        return cloneContent(DEFAULT_ROUNDS, DEFAULT_CLOSING);
+      }
+    }
+
+    function saveContent(rounds, closing) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ rounds, closing }));
+    }
+
+    let content = loadContent();
+    let ROUNDS = content.rounds;
+    let CLOSING = content.closing;
 
     function scoreGuess(guess, answer) {
       const len = answer.length;
@@ -560,10 +770,19 @@
       play: document.getElementById("screen-play"),
       note: document.getElementById("screen-note"),
       end: document.getElementById("screen-end"),
+      edit: document.getElementById("screen-edit"),
     };
 
     const els = {
       btnStart: document.getElementById("btn-start"),
+      btnEdit: document.getElementById("btn-edit"),
+      btnEditBack: document.getElementById("btn-edit-back"),
+      btnEditReset: document.getElementById("btn-edit-reset"),
+      editForm: document.getElementById("edit-form"),
+      editRounds: document.getElementById("edit-rounds"),
+      editClosingTitle: document.getElementById("edit-closing-title"),
+      editClosingBody: document.getElementById("edit-closing-body"),
+      editError: document.getElementById("edit-error"),
       btnNext: document.getElementById("btn-next"),
       progress: document.getElementById("progress"),
       roundMeta: document.getElementById("round-meta"),
@@ -908,8 +1127,154 @@
       startRound();
     }
 
+    function bodyToTextarea(body) {
+      return body.join("\n\n");
+    }
+
+    function textareaToBody(text) {
+      return text
+        .split(/\n\s*\n/)
+        .map((p) => p.trim())
+        .filter(Boolean);
+    }
+
+    function addEditField(parent, labelText, inputEl) {
+      const field = document.createElement("div");
+      field.className = "edit-field";
+      const label = document.createElement("label");
+      label.className = "edit-label";
+      label.htmlFor = inputEl.id;
+      label.textContent = labelText;
+      field.append(label, inputEl);
+      parent.appendChild(field);
+    }
+
+    function buildEditForm() {
+      els.editRounds.innerHTML = "";
+      ROUNDS.forEach((round, i) => {
+        const section = document.createElement("div");
+        section.className = "edit-section";
+
+        const heading = document.createElement("h3");
+        heading.className = "edit-section-title";
+        heading.textContent = `Round ${i + 1}`;
+        section.appendChild(heading);
+
+        const answer = document.createElement("input");
+        answer.className = "edit-input edit-input--word";
+        answer.type = "text";
+        answer.id = `edit-answer-${i}`;
+        answer.autocomplete = "off";
+        answer.value = round.answer;
+        addEditField(section, "Word", answer);
+
+        const clue = document.createElement("input");
+        clue.className = "edit-input";
+        clue.type = "text";
+        clue.id = `edit-clue-${i}`;
+        clue.autocomplete = "off";
+        clue.value = round.clue;
+        addEditField(section, "Description", clue);
+
+        const note = document.createElement("textarea");
+        note.className = "edit-textarea";
+        note.id = `edit-note-${i}`;
+        note.rows = 2;
+        note.value = round.note;
+        addEditField(section, "Note after round (optional)", note);
+
+        els.editRounds.appendChild(section);
+      });
+
+      els.editClosingTitle.value = CLOSING.title;
+      els.editClosingBody.value = bodyToTextarea(CLOSING.body);
+      els.editError.hidden = true;
+      els.editError.textContent = "";
+    }
+
+    function showEditError(message) {
+      els.editError.textContent = message;
+      els.editError.hidden = false;
+    }
+
+    function openEditScreen() {
+      buildEditForm();
+      showScreen("edit");
+    }
+
+    function applyContent(nextRounds, nextClosing) {
+      content = { rounds: nextRounds, closing: nextClosing };
+      ROUNDS = content.rounds;
+      CLOSING = content.closing;
+    }
+
+    function readEditForm() {
+      const rounds = ROUNDS.map((_, i) => {
+        const answer = normalizeWord(document.getElementById(`edit-answer-${i}`).value);
+        const clue = document.getElementById(`edit-clue-${i}`).value.trim();
+        const note = document.getElementById(`edit-note-${i}`).value.trim();
+        return { answer, clue, note };
+      });
+
+      const closing = {
+        title: els.editClosingTitle.value.trim(),
+        body: textareaToBody(els.editClosingBody.value),
+      };
+
+      return { rounds, closing };
+    }
+
+    function validateContent({ rounds, closing }) {
+      for (let i = 0; i < rounds.length; i += 1) {
+        const { answer, clue } = rounds[i];
+        if (!answer || answer.length < 2) {
+          return `Round ${i + 1}: enter a word with at least 2 letters.`;
+        }
+        if (answer.length > 10) {
+          return `Round ${i + 1}: words can be at most 10 letters.`;
+        }
+        if (!clue) {
+          return `Round ${i + 1}: add a description.`;
+        }
+      }
+      if (!closing.title) {
+        return "Add a title for the last message.";
+      }
+      if (!closing.body.length) {
+        return "Add at least one paragraph for the last message.";
+      }
+      return null;
+    }
+
+    function handleEditSave(e) {
+      e.preventDefault();
+      const next = readEditForm();
+      const error = validateContent(next);
+      if (error) {
+        showEditError(error);
+        return;
+      }
+      saveContent(next.rounds, next.closing);
+      applyContent(next.rounds, next.closing);
+      showScreen("opening");
+    }
+
+    function handleEditReset() {
+      if (!window.confirm("Reset all words and messages to the original defaults?")) return;
+      localStorage.removeItem(STORAGE_KEY);
+      applyContent(
+        normalizeRounds(cloneContent(DEFAULT_ROUNDS, DEFAULT_CLOSING).rounds),
+        cloneContent(DEFAULT_ROUNDS, DEFAULT_CLOSING).closing,
+      );
+      buildEditForm();
+    }
+
     // ─── Init ───
     els.btnStart.addEventListener("click", startGame);
+    els.btnEdit.addEventListener("click", openEditScreen);
+    els.btnEditBack.addEventListener("click", () => showScreen("opening"));
+    els.btnEditReset.addEventListener("click", handleEditReset);
+    els.editForm.addEventListener("submit", handleEditSave);
     els.btnNext.addEventListener("click", nextFromNote);
     buildKeyboard();
 
@@ -932,9 +1297,13 @@
     const testResult = runTests();
     console.log(testResult.lines.join("\n"));
 
-    if (new URLSearchParams(location.search).has("test")) {
+    const urlParams = new URLSearchParams(location.search);
+    if (urlParams.has("test")) {
       els.testOutput.hidden = false;
       els.testOutput.textContent = testResult.lines.join("\n");
+    }
+    if (urlParams.has("edit")) {
+      openEditScreen();
     }
   </script>
 </body>
