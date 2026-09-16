@@ -49,6 +49,8 @@
     .screen[hidden] { display: none !important; }
 
     .screen {
+      position: relative;
+      z-index: 1;
       min-height: 100svh;
       display: flex;
       flex-direction: column;
@@ -544,9 +546,97 @@
       align-items: center;
       gap: 0.75rem;
     }
+
+    .round-bg {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      background-size: cover;
+      background-position: center;
+      opacity: 0;
+      transition: opacity 0.35s ease;
+    }
+
+    .round-bg.is-visible { opacity: 1; }
+
+    .round-bg::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: rgba(180, 184, 190, 0.62);
+    }
+
+    .edit-image-field {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .edit-image-preview {
+      width: 100%;
+      max-height: 9rem;
+      object-fit: cover;
+      border-radius: 0.5rem;
+      border: 1px solid var(--hairline);
+      background: var(--silver-shine);
+    }
+
+    .edit-image-preview[hidden] { display: none !important; }
+
+    .edit-image-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .edit-file-input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    .edit-file-label {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.55rem 0.9rem;
+      border-radius: 999px;
+      border: 1px solid var(--hairline);
+      background: var(--silver-shine);
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .edit-file-label:focus-within {
+      outline: none;
+      box-shadow: var(--focus-ring);
+    }
+
+    .edit-image-remove {
+      appearance: none;
+      border: 1px solid var(--hairline);
+      border-radius: 999px;
+      background: transparent;
+      color: var(--muted);
+      font-family: inherit;
+      font-size: 0.85rem;
+      padding: 0.55rem 0.9rem;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
+
+  <div id="round-bg" class="round-bg" aria-hidden="true" hidden></div>
 
   <!-- Opening -->
   <section id="screen-opening" class="screen">
@@ -591,7 +681,7 @@
   <section id="screen-edit" class="screen" hidden>
     <header class="edit-header">
       <h2 class="edit-title">Edit content</h2>
-      <p class="edit-sub">Changes are saved on this device.</p>
+      <p class="edit-sub">Words, photos, and messages are saved on this device.</p>
     </header>
 
     <form class="edit-form" id="edit-form" novalidate>
@@ -659,7 +749,12 @@
 
     function cloneContent(rounds, closing) {
       return {
-        rounds: rounds.map((r) => ({ answer: r.answer, clue: r.clue, note: r.note })),
+        rounds: rounds.map((r) => ({
+          answer: r.answer,
+          clue: r.clue,
+          note: r.note,
+          backgroundImage: r.backgroundImage || "",
+        })),
         closing: {
           title: closing.title,
           body: [...closing.body],
@@ -683,7 +778,10 @@
           return cloneContent(DEFAULT_ROUNDS, DEFAULT_CLOSING);
         }
         return {
-          rounds: normalizeRounds(saved.rounds),
+          rounds: normalizeRounds(saved.rounds).map((round, i) => ({
+            ...round,
+            backgroundImage: String(saved.rounds[i]?.backgroundImage || ""),
+          })),
           closing: {
             title: String(saved.closing.title || DEFAULT_CLOSING.title),
             body: Array.isArray(saved.closing.body) && saved.closing.body.length
@@ -697,7 +795,81 @@
     }
 
     function saveContent(rounds, closing) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ rounds, closing }));
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ rounds, closing }));
+      } catch (err) {
+        if (err && (err.name === "QuotaExceededError" || err.code === 22)) {
+          throw new Error("Storage is full. Try smaller photos or remove some background images.");
+        }
+        throw err;
+      }
+    }
+
+    const MAX_IMAGE_BYTES = 450000;
+    const MAX_IMAGE_DIMENSION = 1400;
+
+    function loadImageFromFile(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error("Could not read that image."));
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function loadImageElement(src) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error("Could not load that image."));
+        img.src = src;
+      });
+    }
+
+    function canvasToBlob(canvas, type, quality) {
+      return new Promise((resolve) => {
+        canvas.toBlob((blob) => resolve(blob), type, quality);
+      });
+    }
+
+    async function compressImageFile(file) {
+      if (!file.type.startsWith("image/")) {
+        throw new Error("Please choose a photo from your gallery.");
+      }
+
+      const dataUrl = await loadImageFromFile(file);
+      const img = await loadImageElement(dataUrl);
+      const scale = Math.min(1, MAX_IMAGE_DIMENSION / Math.max(img.width, img.height));
+      const width = Math.max(1, Math.round(img.width * scale));
+      const height = Math.max(1, Math.round(img.height * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, width, height);
+
+      let quality = 0.88;
+      let blob = await canvasToBlob(canvas, "image/jpeg", quality);
+
+      while (blob && blob.size > MAX_IMAGE_BYTES && quality > 0.45) {
+        quality -= 0.08;
+        blob = await canvasToBlob(canvas, "image/jpeg", quality);
+      }
+
+      if (!blob) {
+        throw new Error("Could not process that image.");
+      }
+
+      if (blob.size > MAX_IMAGE_BYTES) {
+        throw new Error("That photo is too large. Try a smaller image from your gallery.");
+      }
+
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error("Could not save that image."));
+        reader.readAsDataURL(blob);
+      });
     }
 
     let content = loadContent();
@@ -814,7 +986,10 @@
       closingBody: document.getElementById("closing-body"),
       recap: document.getElementById("recap"),
       testOutput: document.getElementById("test-output"),
+      roundBg: document.getElementById("round-bg"),
     };
+
+    let editImages = [];
 
     const KB_ROWS = [
       ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
@@ -830,9 +1005,28 @@
     let roundEnding = false;
     let lastRoundWasRevealed = false;
 
+    function setRoundBackground(imageUrl) {
+      if (!imageUrl) {
+        clearRoundBackground();
+        return;
+      }
+      els.roundBg.style.backgroundImage = `url("${imageUrl.replace(/"/g, "%22")}")`;
+      els.roundBg.hidden = false;
+      requestAnimationFrame(() => els.roundBg.classList.add("is-visible"));
+    }
+
+    function clearRoundBackground() {
+      els.roundBg.classList.remove("is-visible");
+      els.roundBg.hidden = true;
+      els.roundBg.style.backgroundImage = "";
+    }
+
     function showScreen(name) {
       Object.values(screens).forEach((el) => { el.hidden = true; });
       screens[name].hidden = false;
+      if (name !== "play" && name !== "note") {
+        clearRoundBackground();
+      }
     }
 
     function currentRound() {
@@ -1076,6 +1270,7 @@
         els.noteText.hidden = true;
       }
 
+      setRoundBackground(round.backgroundImage);
       showScreen("note");
     }
 
@@ -1091,6 +1286,7 @@
       buildBoard();
       els.roundMeta.textContent = `Round ${roundIndex + 1} · ${round.answer.length} letters`;
       els.clue.textContent = round.clue;
+      setRoundBackground(round.backgroundImage);
       renderCurrentRow();
       showScreen("play");
     }
@@ -1166,7 +1362,35 @@
       parent.appendChild(field);
     }
 
+    function updateEditImagePreview(i) {
+      const preview = document.getElementById(`edit-image-preview-${i}`);
+      const removeBtn = document.getElementById(`edit-image-remove-${i}`);
+      if (!preview || !removeBtn) return;
+      const imageUrl = editImages[i];
+      if (imageUrl) {
+        preview.src = imageUrl;
+        preview.hidden = false;
+        removeBtn.hidden = false;
+      } else {
+        preview.removeAttribute("src");
+        preview.hidden = true;
+        removeBtn.hidden = true;
+      }
+    }
+
+    async function handleImageUpload(i, file) {
+      if (!file) return;
+      try {
+        els.editError.hidden = true;
+        editImages[i] = await compressImageFile(file);
+        updateEditImagePreview(i);
+      } catch (err) {
+        showEditError(err.message || "Could not add that photo.");
+      }
+    }
+
     function buildEditForm() {
+      editImages = ROUNDS.map((round) => round.backgroundImage || "");
       els.editRounds.innerHTML = "";
       ROUNDS.forEach((round, i) => {
         const section = document.createElement("div");
@@ -1200,7 +1424,60 @@
         note.value = round.note;
         addEditField(section, "Note after round (optional)", note);
 
+        const imageField = document.createElement("div");
+        imageField.className = "edit-image-field";
+
+        const imageLabel = document.createElement("span");
+        imageLabel.className = "edit-label";
+        imageLabel.textContent = "Background photo (optional)";
+        imageField.appendChild(imageLabel);
+
+        const preview = document.createElement("img");
+        preview.className = "edit-image-preview";
+        preview.id = `edit-image-preview-${i}`;
+        preview.alt = "";
+        preview.hidden = true;
+        imageField.appendChild(preview);
+
+        const actions = document.createElement("div");
+        actions.className = "edit-image-actions";
+
+        const fileLabel = document.createElement("label");
+        fileLabel.className = "edit-file-label";
+        fileLabel.htmlFor = `edit-image-${i}`;
+        fileLabel.textContent = "Choose from gallery";
+
+        const fileInput = document.createElement("input");
+        fileInput.className = "edit-file-input";
+        fileInput.type = "file";
+        fileInput.id = `edit-image-${i}`;
+        fileInput.accept = "image/*";
+        fileInput.addEventListener("change", () => {
+          const [file] = fileInput.files;
+          fileInput.value = "";
+          handleImageUpload(i, file);
+        });
+
+        fileLabel.appendChild(fileInput);
+        actions.appendChild(fileLabel);
+
+        const removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.className = "edit-image-remove";
+        removeBtn.id = `edit-image-remove-${i}`;
+        removeBtn.textContent = "Remove photo";
+        removeBtn.hidden = true;
+        removeBtn.addEventListener("click", () => {
+          editImages[i] = "";
+          updateEditImagePreview(i);
+        });
+        actions.appendChild(removeBtn);
+
+        imageField.appendChild(actions);
+        section.appendChild(imageField);
+
         els.editRounds.appendChild(section);
+        updateEditImagePreview(i);
       });
 
       els.editClosingTitle.value = CLOSING.title;
@@ -1230,7 +1507,12 @@
         const answer = normalizeWord(document.getElementById(`edit-answer-${i}`).value);
         const clue = document.getElementById(`edit-clue-${i}`).value.trim();
         const note = document.getElementById(`edit-note-${i}`).value.trim();
-        return { answer, clue, note };
+        return {
+          answer,
+          clue,
+          note,
+          backgroundImage: editImages[i] || "",
+        };
       });
 
       const closing = {
@@ -1271,7 +1553,12 @@
         showEditError(error);
         return;
       }
-      saveContent(next.rounds, next.closing);
+      try {
+        saveContent(next.rounds, next.closing);
+      } catch (err) {
+        showEditError(err.message || "Could not save your changes.");
+        return;
+      }
       applyContent(next.rounds, next.closing);
       showScreen("opening");
     }
