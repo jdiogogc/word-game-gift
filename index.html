@@ -3,24 +3,26 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Five words</title>
+  <title>WORDLE</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
   <style>
     :root {
-      --ground: #E8E7EC;
-      --card: #FFFFFF;
-      --text: #22283A;
-      --muted: #6E7183;
-      --hairline: #D2D0D9;
-      --right: #3E7A63;
-      --near: #9A6B2B;
-      --miss: #B9B7C2;
-      --accent: #6B4E71;
+      --ground: #B4B8BE;
+      --card: #E4E6EA;
+      --text: #1C1E22;
+      --muted: #565B63;
+      --hairline: #949AA3;
+      --right: #4F6F5F;
+      --near: #85704A;
+      --miss: #9DA1A8;
+      --accent: #4A5159;
       --tile-size: 3.25rem;
       --tile-gap: 0.35rem;
       --focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent);
+      --silver-shine: linear-gradient(180deg, #F2F3F5 0%, #D8DBE0 55%, #C4C8CE 100%);
+      --silver-panel: linear-gradient(180deg, #ECEEF1 0%, #D5D9DE 100%);
     }
 
     *, *::before, *::after { box-sizing: border-box; }
@@ -28,7 +30,10 @@
     html, body {
       margin: 0;
       min-height: 100svh;
-      background: var(--ground);
+      background:
+        radial-gradient(circle at 20% 0%, rgba(255, 255, 255, 0.45), transparent 45%),
+        radial-gradient(circle at 80% 100%, rgba(255, 255, 255, 0.2), transparent 40%),
+        linear-gradient(165deg, #C8CBD0 0%, #AEB3BA 48%, #969BA3 100%);
       color: var(--text);
       font-family: "Archivo", system-ui, sans-serif;
     }
@@ -52,10 +57,11 @@
     }
 
     .card {
-      background: var(--card);
+      background: var(--silver-panel);
       border: 1px solid var(--hairline);
       border-radius: 1rem;
       width: min(100%, 26rem);
+      box-shadow: 0 1px 0 rgba(255, 255, 255, 0.55) inset;
     }
 
     /* Opening */
@@ -66,18 +72,24 @@
     }
 
     .opening-title {
-      font-family: "Newsreader", Georgia, serif;
-      font-size: clamp(2rem, 8vw, 2.75rem);
-      font-weight: 500;
-      line-height: 1.15;
+      font-family: "Archivo", system-ui, sans-serif;
+      font-size: clamp(2.75rem, 12vw, 4rem);
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      line-height: 1;
       margin: 0;
+      color: #2A2E34;
+      text-shadow: 0 1px 0 rgba(255, 255, 255, 0.65);
     }
 
     .opening-sub {
       color: var(--muted);
-      font-size: 1rem;
+      font-size: 1.05rem;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
       line-height: 1.5;
-      margin: 0.75rem 0 0;
+      margin: 1rem 0 0;
     }
 
     /* Play */
@@ -124,11 +136,12 @@
     .clue {
       margin: 0;
       padding: 1rem 1.1rem;
-      background: var(--card);
+      background: var(--silver-panel);
       border: 1px solid var(--hairline);
       border-radius: 0.75rem;
       font-size: 0.95rem;
       line-height: 1.45;
+      box-shadow: 0 1px 0 rgba(255, 255, 255, 0.45) inset;
     }
 
     .play-main {
@@ -181,8 +194,9 @@
       font-size: calc(var(--tile-size) * 0.46);
       font-weight: 600;
       text-transform: uppercase;
-      background: var(--card);
+      background: var(--silver-shine);
       color: var(--text);
+      box-shadow: 0 1px 0 rgba(255, 255, 255, 0.5) inset;
       transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
     }
 
@@ -241,7 +255,7 @@
       max-width: 2.4rem;
       border: none;
       border-radius: 0.35rem;
-      background: var(--card);
+      background: var(--silver-shine);
       border: 1px solid var(--hairline);
       color: var(--text);
       font-family: inherit;
@@ -249,6 +263,7 @@
       font-weight: 600;
       cursor: pointer;
       touch-action: manipulation;
+      box-shadow: 0 1px 0 rgba(255, 255, 255, 0.45) inset;
     }
 
     .kb-key--wide {
@@ -354,9 +369,9 @@
 
     .btn {
       appearance: none;
-      border: none;
+      border: 1px solid #707780;
       border-radius: 999px;
-      background: var(--accent);
+      background: linear-gradient(180deg, #8A9098 0%, #5E656E 100%);
       color: #fff;
       font-family: inherit;
       font-size: 0.95rem;
@@ -364,6 +379,7 @@
       padding: 0.85rem 1.75rem;
       cursor: pointer;
       touch-action: manipulation;
+      box-shadow: 0 1px 0 rgba(255, 255, 255, 0.35) inset, 0 2px 6px rgba(28, 30, 34, 0.18);
     }
 
     @media (max-width: 360px) {
@@ -432,10 +448,11 @@
     }
 
     .edit-section {
-      background: var(--card);
+      background: var(--silver-panel);
       border: 1px solid var(--hairline);
       border-radius: 0.75rem;
       padding: 1rem;
+      box-shadow: 0 1px 0 rgba(255, 255, 255, 0.45) inset;
     }
 
     .edit-section-title {
@@ -471,7 +488,7 @@
       font-family: inherit;
       font-size: 0.9rem;
       color: var(--text);
-      background: var(--ground);
+      background: var(--silver-shine);
     }
 
     .edit-input:focus,
@@ -534,8 +551,8 @@
   <!-- Opening -->
   <section id="screen-opening" class="screen">
     <div>
-      <h1 class="opening-title">Five words</h1>
-      <p class="opening-sub">A small game, just for you.</p>
+      <h1 class="opening-title">WORDLE</h1>
+      <p class="opening-sub">Tinyversary Edition</p>
     </div>
     <div class="opening-actions">
       <button type="button" class="btn" id="btn-start">Start</button>
