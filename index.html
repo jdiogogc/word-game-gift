@@ -669,6 +669,28 @@
     .edit-add-round {
       width: 100%;
     }
+
+    .edit-sync-note {
+      margin: 0;
+      font-size: 0.85rem;
+      line-height: 1.45;
+      color: var(--muted);
+    }
+
+    .edit-sync-status {
+      margin: 0;
+      font-size: 0.85rem;
+      line-height: 1.45;
+      color: var(--accent);
+    }
+
+    .edit-sync-status.is-error { color: #9b2c2c; }
+
+    .opening-loading {
+      color: var(--muted);
+      font-size: 0.9rem;
+      margin: 0;
+    }
   </style>
 </head>
 <body>
@@ -681,9 +703,10 @@
       <h1 class="opening-title">WORDLE</h1>
       <p class="opening-sub">Tinyversary Edition</p>
     </div>
+    <p class="opening-loading" id="opening-loading">Loading game…</p>
     <div class="opening-actions">
-      <button type="button" class="btn" id="btn-start">Start</button>
-      <button type="button" class="btn btn--text" id="btn-edit">Edit words &amp; messages</button>
+      <button type="button" class="btn" id="btn-start" disabled>Start</button>
+      <button type="button" class="btn btn--text" id="btn-edit" disabled>Edit words &amp; messages</button>
     </div>
   </section>
 
@@ -718,13 +741,23 @@
   <section id="screen-edit" class="screen" hidden>
     <header class="edit-header">
       <h2 class="edit-title">Edit content</h2>
-      <p class="edit-sub">Words, photos, and messages are saved on this device.</p>
+      <p class="edit-sub">Saved changes can be shared with everyone who has the link.</p>
     </header>
 
     <form class="edit-form" id="edit-form" novalidate>
       <div id="edit-rounds"></div>
 
       <button type="button" class="btn btn--ghost edit-add-round" id="btn-add-round">Add another word</button>
+
+      <div class="edit-section">
+        <h3 class="edit-section-title">Share with everyone</h3>
+        <p class="edit-sync-note">Paste a GitHub personal access token once with write access to this repository. After that, Save changes updates the shared game for anyone with the link. Create one at <a href="https://github.com/settings/tokens" target="_blank" rel="noopener noreferrer">github.com/settings/tokens</a>.</p>
+        <div class="edit-field">
+          <label class="edit-label" for="edit-github-token">GitHub token</label>
+          <input class="edit-input" type="password" id="edit-github-token" autocomplete="off" placeholder="ghp_… or github_pat_…">
+        </div>
+        <p class="edit-sync-status" id="edit-sync-status" hidden></p>
+      </div>
 
       <div class="edit-section">
         <h3 class="edit-section-title">Last message</h3>
@@ -776,6 +809,8 @@
     };
 
     const STORAGE_KEY = "five-words-content";
+    const TOKEN_STORAGE_KEY = "five-words-github-token";
+    const SHARED_CONTENT_PATH = "shared-content.json";
     const GUESSES = 6;
 
     // ─── Game logic ───
@@ -808,39 +843,163 @@
       }));
     }
 
-    function loadContent() {
+    function parseSharedPayload(saved) {
+      if (!saved || !Array.isArray(saved.rounds) || !saved.closing) {
+        return null;
+      }
+      return {
+        rounds: normalizeRounds(saved.rounds).map((round, i) => ({
+          ...round,
+          backgroundImage: String(saved.rounds[i]?.backgroundImage || ""),
+        })),
+        closing: {
+          title: String(saved.closing.title || DEFAULT_CLOSING.title),
+          body: Array.isArray(saved.closing.body) && saved.closing.body.length
+            ? saved.closing.body.map(String)
+            : [...DEFAULT_CLOSING.body],
+        },
+        updatedAt: saved.updatedAt || null,
+      };
+    }
+
+    function loadLocalContent() {
       try {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (!raw) return cloneContent(DEFAULT_ROUNDS, DEFAULT_CLOSING);
         const saved = JSON.parse(raw);
-        if (!Array.isArray(saved.rounds) || !saved.closing) {
-          return cloneContent(DEFAULT_ROUNDS, DEFAULT_CLOSING);
-        }
-        return {
-          rounds: normalizeRounds(saved.rounds).map((round, i) => ({
-            ...round,
-            backgroundImage: String(saved.rounds[i]?.backgroundImage || ""),
-          })),
-          closing: {
-            title: String(saved.closing.title || DEFAULT_CLOSING.title),
-            body: Array.isArray(saved.closing.body) && saved.closing.body.length
-              ? saved.closing.body.map(String)
-              : [...DEFAULT_CLOSING.body],
-          },
-        };
+        const parsed = parseSharedPayload(saved);
+        return parsed || cloneContent(DEFAULT_ROUNDS, DEFAULT_CLOSING);
       } catch {
         return cloneContent(DEFAULT_ROUNDS, DEFAULT_CLOSING);
       }
     }
 
-    function saveContent(rounds, closing) {
+    function getRepoConfig() {
+      const hostMatch = location.hostname.match(/^([^.]+)\.github\.io$/i);
+      const pathParts = location.pathname.split("/").filter(Boolean);
+      if (hostMatch && pathParts[0]) {
+        return { owner: hostMatch[1], repo: pathParts[0], branch: "main" };
+      }
+      return { owner: "jdiogogc", repo: "word-game-gift", branch: "main" };
+    }
+
+    function getSharedContentUrls() {
+      const repo = getRepoConfig();
+      const cacheBust = Date.now();
+      return [
+        new URL(SHARED_CONTENT_PATH, location.href).href + `?t=${cacheBust}`,
+        `https://raw.githubusercontent.com/${repo.owner}/${repo.repo}/${repo.branch}/${SHARED_CONTENT_PATH}?t=${cacheBust}`,
+      ];
+    }
+
+    async function loadRemoteContent() {
+      const urls = getSharedContentUrls();
+      for (const url of urls) {
+        try {
+          const response = await fetch(url, { cache: "no-store" });
+          if (!response.ok) continue;
+          const saved = await response.json();
+          const parsed = parseSharedPayload(saved);
+          if (parsed) return parsed;
+        } catch {
+          // try next source
+        }
+      }
+      return null;
+    }
+
+    function saveContent(rounds, closing, updatedAt) {
+      const payload = {
+        version: 1,
+        updatedAt: updatedAt || new Date().toISOString(),
+        rounds,
+        closing,
+      };
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ rounds, closing }));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
       } catch (err) {
         if (err && (err.name === "QuotaExceededError" || err.code === 22)) {
           throw new Error("Storage is full. Try smaller photos or remove some background images.");
         }
         throw err;
+      }
+      return payload;
+    }
+
+    function utf8ToBase64(text) {
+      const bytes = new TextEncoder().encode(text);
+      let binary = "";
+      bytes.forEach((byte) => {
+        binary += String.fromCharCode(byte);
+      });
+      return btoa(binary);
+    }
+
+    function getGitHubToken() {
+      const fromField = els.editGithubToken?.value.trim();
+      if (fromField) return fromField;
+      return localStorage.getItem(TOKEN_STORAGE_KEY) || "";
+    }
+
+    function rememberGitHubToken(token) {
+      if (!token) {
+        localStorage.removeItem(TOKEN_STORAGE_KEY);
+        return;
+      }
+      localStorage.setItem(TOKEN_STORAGE_KEY, token);
+    }
+
+    function setSyncStatus(message, isError) {
+      if (!els.editSyncStatus) return;
+      if (!message) {
+        els.editSyncStatus.hidden = true;
+        els.editSyncStatus.textContent = "";
+        els.editSyncStatus.classList.remove("is-error");
+        return;
+      }
+      els.editSyncStatus.hidden = false;
+      els.editSyncStatus.textContent = message;
+      els.editSyncStatus.classList.toggle("is-error", Boolean(isError));
+    }
+
+    async function uploadSharedContent(token, payload) {
+      const repo = getRepoConfig();
+      const apiBase = `https://api.github.com/repos/${repo.owner}/${repo.repo}/contents/${SHARED_CONTENT_PATH}`;
+      const headers = {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${token}`,
+        "X-GitHub-Api-Version": "2022-11-28",
+      };
+
+      const getRes = await fetch(`${apiBase}?ref=${encodeURIComponent(repo.branch)}`, { headers });
+      let sha = null;
+      if (getRes.ok) {
+        const existing = await getRes.json();
+        sha = existing.sha;
+      } else if (getRes.status !== 404) {
+        const err = await getRes.json().catch(() => ({}));
+        throw new Error(err.message || "Could not read shared content from GitHub.");
+      }
+
+      const body = {
+        message: "Update shared game content",
+        content: utf8ToBase64(JSON.stringify(payload, null, 2)),
+        branch: repo.branch,
+      };
+      if (sha) body.sha = sha;
+
+      const putRes = await fetch(apiBase, {
+        method: "PUT",
+        headers: {
+          ...headers,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!putRes.ok) {
+        const err = await putRes.json().catch(() => ({}));
+        throw new Error(err.message || "Could not publish shared content.");
       }
     }
 
@@ -911,7 +1070,7 @@
       });
     }
 
-    let content = loadContent();
+    let content = cloneContent(DEFAULT_ROUNDS, DEFAULT_CLOSING);
     let ROUNDS = content.rounds;
     let CLOSING = content.closing;
 
@@ -1007,6 +1166,9 @@
       btnEditBack: document.getElementById("btn-edit-back"),
       btnEditReset: document.getElementById("btn-edit-reset"),
       btnAddRound: document.getElementById("btn-add-round"),
+      editGithubToken: document.getElementById("edit-github-token"),
+      editSyncStatus: document.getElementById("edit-sync-status"),
+      openingLoading: document.getElementById("opening-loading"),
       editForm: document.getElementById("edit-form"),
       editRounds: document.getElementById("edit-rounds"),
       editClosingTitle: document.getElementById("edit-closing-title"),
@@ -1594,6 +1756,8 @@
         backgroundImage: round.backgroundImage || "",
       }));
       editImages = editDraftRounds.map((round) => round.backgroundImage || "");
+      els.editGithubToken.value = localStorage.getItem(TOKEN_STORAGE_KEY) || "";
+      setSyncStatus("", false);
       buildEditForm();
       showScreen("edit");
     }
@@ -1646,7 +1810,7 @@
       return null;
     }
 
-    function handleEditSave(e) {
+    async function handleEditSave(e) {
       e.preventDefault();
       const next = readEditForm();
       const error = validateContent(next);
@@ -1654,23 +1818,56 @@
         showEditError(error);
         return;
       }
+
+      const token = getGitHubToken();
+      rememberGitHubToken(token);
+
+      let payload;
       try {
-        saveContent(next.rounds, next.closing);
+        payload = saveContent(next.rounds, next.closing);
       } catch (err) {
         showEditError(err.message || "Could not save your changes.");
         return;
       }
+
+      if (!token) {
+        setSyncStatus("Saved on this device only. Add a GitHub token to share with everyone.", true);
+        applyContent(next.rounds, next.closing);
+        showScreen("opening");
+        return;
+      }
+
+      setSyncStatus("Publishing for everyone…", false);
+      try {
+        await uploadSharedContent(token, payload);
+      } catch (err) {
+        setSyncStatus(err.message || "Could not publish shared content.", true);
+        showEditError("Saved locally, but sharing failed. Check your GitHub token and try again.");
+        applyContent(next.rounds, next.closing);
+        return;
+      }
+
       applyContent(next.rounds, next.closing);
+      setSyncStatus("Published for everyone with the link.", false);
       showScreen("opening");
     }
 
-    function handleEditReset() {
+    async function handleEditReset() {
       if (!window.confirm("Reset all words and messages to the original defaults?")) return;
       localStorage.removeItem(STORAGE_KEY);
-      applyContent(
-        normalizeRounds(cloneContent(DEFAULT_ROUNDS, DEFAULT_CLOSING).rounds),
-        cloneContent(DEFAULT_ROUNDS, DEFAULT_CLOSING).closing,
-      );
+      const defaults = cloneContent(DEFAULT_ROUNDS, DEFAULT_CLOSING);
+      applyContent(normalizeRounds(defaults.rounds), defaults.closing);
+
+      const token = getGitHubToken();
+      if (token) {
+        try {
+          const payload = saveContent(ROUNDS, CLOSING);
+          await uploadSharedContent(token, payload);
+        } catch (err) {
+          showEditError(err.message || "Reset locally, but sharing the reset failed.");
+        }
+      }
+
       editDraftRounds = ROUNDS.map((round) => ({
         answer: round.answer,
         clue: round.clue,
@@ -1681,7 +1878,24 @@
       buildEditForm();
     }
 
+    async function bootstrapContent() {
+      els.openingLoading.hidden = false;
+      els.btnStart.disabled = true;
+      els.btnEdit.disabled = true;
+
+      const remote = await loadRemoteContent();
+      const local = loadLocalContent();
+      const next = remote || local;
+      applyContent(next.rounds, next.closing);
+      saveContent(ROUNDS, CLOSING, remote?.updatedAt || null);
+
+      els.openingLoading.hidden = true;
+      els.btnStart.disabled = false;
+      els.btnEdit.disabled = false;
+    }
+
     // ─── Init ───
+    bootstrapContent();
     els.btnStart.addEventListener("click", startGame);
     els.btnEdit.addEventListener("click", openEditScreen);
     els.btnEditBack.addEventListener("click", () => showScreen("opening"));

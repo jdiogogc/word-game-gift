@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "updatedAt": "2026-09-18T08:00:00.000Z",
+  "rounds": [
+    {
+      "answer": "BRAVE",
+      "clue": "What you were on the day we met.",
+      "note": "You walked in like you already belonged there.",
+      "backgroundImage": ""
+    },
+    {
+      "answer": "PARIS",
+      "clue": "Where we got lost on purpose.",
+      "note": "Every wrong turn was the right one that week.",
+      "backgroundImage": ""
+    },
+    {
+      "answer": "FOUR",
+      "clue": "How many years we've been at this.",
+      "note": "Still counting, still choosing each other.",
+      "backgroundImage": ""
+    },
+    {
+      "answer": "MUSIC",
+      "clue": "The thing playing when you said yes.",
+      "note": "I hear that song differently now.",
+      "backgroundImage": ""
+    },
+    {
+      "answer": "HOME",
+      "clue": "What you are to me.",
+      "note": "",
+      "backgroundImage": ""
+    }
+  ],
+  "closing": {
+    "title": "Thank you for playing",
+    "body": [
+      "These five words barely cover it, but they were the ones I kept coming back to.",
+      "Here's to many more rounds — the easy ones and the hard ones — together."
+    ]
+  }
+}
