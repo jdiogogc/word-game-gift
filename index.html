@@ -865,13 +865,39 @@
     function loadLocalContent() {
       try {
         const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) return cloneContent(DEFAULT_ROUNDS, DEFAULT_CLOSING);
+        if (!raw) return null;
         const saved = JSON.parse(raw);
-        const parsed = parseSharedPayload(saved);
-        return parsed || cloneContent(DEFAULT_ROUNDS, DEFAULT_CLOSING);
+        return parseSharedPayload(saved);
       } catch {
-        return cloneContent(DEFAULT_ROUNDS, DEFAULT_CLOSING);
+        return null;
       }
+    }
+
+    function parseUpdatedAt(value) {
+      if (!value) return 0;
+      const parsed = Date.parse(value);
+      return Number.isNaN(parsed) ? 0 : parsed;
+    }
+
+    function resolveInitialContent(remote, local) {
+      const hasLocalSave = Boolean(localStorage.getItem(STORAGE_KEY));
+      const remoteTime = parseUpdatedAt(remote?.updatedAt);
+      const localTime = parseUpdatedAt(local?.updatedAt);
+
+      if (hasLocalSave && local) {
+        if (!remote || localTime === 0 || localTime >= remoteTime) {
+          return local;
+        }
+        return remote;
+      }
+
+      if (remote) return remote;
+      if (local) return local;
+      return parseSharedPayload({
+        version: 1,
+        rounds: DEFAULT_ROUNDS,
+        closing: DEFAULT_CLOSING,
+      });
     }
 
     function getRepoConfig() {
@@ -1885,9 +1911,9 @@
 
       const remote = await loadRemoteContent();
       const local = loadLocalContent();
-      const next = remote || local;
+      const next = resolveInitialContent(remote, local);
       applyContent(next.rounds, next.closing);
-      saveContent(ROUNDS, CLOSING, remote?.updatedAt || null);
+      saveContent(ROUNDS, CLOSING, next.updatedAt || new Date().toISOString());
 
       els.openingLoading.hidden = true;
       els.btnStart.disabled = false;
