@@ -686,10 +686,14 @@
 
     .edit-sync-status.is-error { color: #9b2c2c; }
 
-    .opening-loading {
+    .opening-loading,
+    .opening-notice {
       color: var(--muted);
       font-size: 0.9rem;
+      line-height: 1.45;
       margin: 0;
+      text-align: center;
+      max-width: 22rem;
     }
   </style>
 </head>
@@ -704,6 +708,7 @@
       <p class="opening-sub">Tinyversary Edition</p>
     </div>
     <p class="opening-loading" id="opening-loading">Loading game…</p>
+    <p class="opening-notice" id="opening-notice" hidden></p>
     <div class="opening-actions">
       <button type="button" class="btn" id="btn-start" disabled>Start</button>
       <button type="button" class="btn btn--text" id="btn-edit" disabled>Edit words &amp; messages</button>
@@ -751,7 +756,7 @@
 
       <div class="edit-section">
         <h3 class="edit-section-title">Share with everyone</h3>
-        <p class="edit-sync-note">Paste a GitHub personal access token once with write access to this repository. After that, Save changes updates the shared game for anyone with the link. Create one at <a href="https://github.com/settings/tokens" target="_blank" rel="noopener noreferrer">github.com/settings/tokens</a>.</p>
+        <p class="edit-sync-note">Paste a GitHub personal access token once with permission to edit this repository (Contents: Read and write). Save changes then updates the game for anyone with the link. They need to refresh the page to see it. Create a token at <a href="https://github.com/settings/tokens" target="_blank" rel="noopener noreferrer">github.com/settings/tokens</a>.</p>
         <div class="edit-field">
           <label class="edit-label" for="edit-github-token">GitHub token</label>
           <input class="edit-input" type="password" id="edit-github-token" autocomplete="off" placeholder="ghp_… or github_pat_…">
@@ -884,15 +889,15 @@
       const remoteTime = parseUpdatedAt(remote?.updatedAt);
       const localTime = parseUpdatedAt(local?.updatedAt);
 
-      if (hasLocalSave && local) {
-        if (!remote || localTime === 0 || localTime >= remoteTime) {
-          return local;
-        }
+      if (hasLocalSave && local && remote) {
+        // Older editor saves have no timestamp. Those must not block a published game.
+        if (localTime === 0) return remote;
+        if (remoteTime === 0 || localTime >= remoteTime) return local;
         return remote;
       }
 
       if (remote) return remote;
-      if (local) return local;
+      if (hasLocalSave && local) return local;
       return parseSharedPayload({
         version: 1,
         rounds: DEFAULT_ROUNDS,
@@ -909,29 +914,39 @@
       return { owner: "jdiogogc", repo: "word-game-gift", branch: "main" };
     }
 
-    function getSharedContentUrls() {
-      const repo = getRepoConfig();
-      const cacheBust = Date.now();
-      return [
-        new URL(SHARED_CONTENT_PATH, location.href).href + `?t=${cacheBust}`,
-        `https://raw.githubusercontent.com/${repo.owner}/${repo.repo}/${repo.branch}/${SHARED_CONTENT_PATH}?t=${cacheBust}`,
-      ];
+    async function fetchSharedPayload(url, headers) {
+      const response = await fetch(url, {
+        cache: "no-store",
+        headers: headers || {},
+      });
+      if (!response.ok) return null;
+      const saved = await response.json();
+      return parseSharedPayload(saved);
     }
 
     async function loadRemoteContent() {
-      const urls = getSharedContentUrls();
-      for (const url of urls) {
-        try {
-          const response = await fetch(url, { cache: "no-store" });
-          if (!response.ok) continue;
-          const saved = await response.json();
-          const parsed = parseSharedPayload(saved);
-          if (parsed) return parsed;
-        } catch {
-          // try next source
-        }
-      }
-      return null;
+      const repo = getRepoConfig();
+      const cacheBust = Date.now();
+      const sources = [
+        fetchSharedPayload(
+          `https://api.github.com/repos/${repo.owner}/${repo.repo}/contents/${SHARED_CONTENT_PATH}?ref=${encodeURIComponent(repo.branch)}`,
+          {
+            Accept: "application/vnd.github.raw",
+            "X-GitHub-Api-Version": "2022-11-28",
+          },
+        ),
+        fetchSharedPayload(new URL(SHARED_CONTENT_PATH, location.href).href + `?t=${cacheBust}`),
+        fetchSharedPayload(
+          `https://raw.githubusercontent.com/${repo.owner}/${repo.repo}/${repo.branch}/${SHARED_CONTENT_PATH}?t=${cacheBust}`,
+        ),
+      ];
+
+      const loaded = (await Promise.all(sources.map((request) => request.catch(() => null))))
+        .filter(Boolean);
+      if (!loaded.length) return null;
+
+      loaded.sort((a, b) => parseUpdatedAt(b.updatedAt) - parseUpdatedAt(a.updatedAt));
+      return loaded[0];
     }
 
     function saveContent(rounds, closing, updatedAt) {
@@ -988,6 +1003,34 @@
       els.editSyncStatus.classList.toggle("is-error", Boolean(isError));
     }
 
+    function showOpeningNotice(message) {
+      if (!els.openingNotice) return;
+      if (!message) {
+        els.openingNotice.hidden = true;
+        els.openingNotice.textContent = "";
+        return;
+      }
+      els.openingNotice.hidden = false;
+      els.openingNotice.textContent = message;
+    }
+
+    function explainGitHubError(status, err) {
+      const message = String(err.message || "");
+      if (status === 401) {
+        return "GitHub rejected that token. Create a new one with access to this repository.";
+      }
+      if (/rate limit/i.test(message)) {
+        return "GitHub is temporarily limiting requests. Wait a minute and try again.";
+      }
+      if (status === 403 || status === 404) {
+        return "That token cannot update this repository. It needs Contents: Read and write.";
+      }
+      if (/too large/i.test(message)) {
+        return "The shared game is too large to publish, usually because of the photos. Remove a photo and try again.";
+      }
+      return message || "Could not publish shared content.";
+    }
+
     async function uploadSharedContent(token, payload) {
       const repo = getRepoConfig();
       const apiBase = `https://api.github.com/repos/${repo.owner}/${repo.repo}/contents/${SHARED_CONTENT_PATH}`;
@@ -1004,7 +1047,7 @@
         sha = existing.sha;
       } else if (getRes.status !== 404) {
         const err = await getRes.json().catch(() => ({}));
-        throw new Error(err.message || "Could not read shared content from GitHub.");
+        throw new Error(explainGitHubError(getRes.status, err));
       }
 
       const body = {
@@ -1025,7 +1068,7 @@
 
       if (!putRes.ok) {
         const err = await putRes.json().catch(() => ({}));
-        throw new Error(err.message || "Could not publish shared content.");
+        throw new Error(explainGitHubError(putRes.status, err));
       }
     }
 
@@ -1195,6 +1238,7 @@
       editGithubToken: document.getElementById("edit-github-token"),
       editSyncStatus: document.getElementById("edit-sync-status"),
       openingLoading: document.getElementById("opening-loading"),
+      openingNotice: document.getElementById("opening-notice"),
       editForm: document.getElementById("edit-form"),
       editRounds: document.getElementById("edit-rounds"),
       editClosingTitle: document.getElementById("edit-closing-title"),
@@ -1857,8 +1901,8 @@
       }
 
       if (!token) {
-        setSyncStatus("Saved on this device only. Add a GitHub token to share with everyone.", true);
         applyContent(next.rounds, next.closing);
+        showOpeningNotice("Saved on this device only. Add a GitHub token under Edit to share it.");
         showScreen("opening");
         return;
       }
@@ -1867,14 +1911,15 @@
       try {
         await uploadSharedContent(token, payload);
       } catch (err) {
-        setSyncStatus(err.message || "Could not publish shared content.", true);
-        showEditError("Saved locally, but sharing failed. Check your GitHub token and try again.");
+        const message = err.message || "Could not publish shared content.";
+        setSyncStatus(message, true);
+        showEditError(`Saved on this device, but it was not shared. ${message}`);
         applyContent(next.rounds, next.closing);
         return;
       }
 
       applyContent(next.rounds, next.closing);
-      setSyncStatus("Published for everyone with the link.", false);
+      showOpeningNotice("Shared. Anyone with the link will see it after they refresh.");
       showScreen("opening");
     }
 
