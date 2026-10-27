@@ -92,6 +92,7 @@
       text-transform: uppercase;
       line-height: 1.5;
       margin: 1rem 0 0;
+      max-width: 18rem;
     }
 
     /* Play */
@@ -705,7 +706,7 @@
   <section id="screen-opening" class="screen">
     <div>
       <h1 class="opening-title">WORDLE</h1>
-      <p class="opening-sub">Tinyversary Edition</p>
+      <p class="opening-sub" id="opening-sub">Tinyversary Edition</p>
     </div>
     <p class="opening-loading" id="opening-loading">Loading game…</p>
     <p class="opening-notice" id="opening-notice" hidden></p>
@@ -750,6 +751,14 @@
     </header>
 
     <form class="edit-form" id="edit-form" novalidate>
+      <div class="edit-section">
+        <h3 class="edit-section-title">Opening</h3>
+        <div class="edit-field">
+          <label class="edit-label" for="edit-subtitle">Subtitle</label>
+          <input class="edit-input" type="text" id="edit-subtitle" autocomplete="off" maxlength="60" placeholder="Tinyversary Edition">
+        </div>
+      </div>
+
       <div id="edit-rounds"></div>
 
       <button type="button" class="btn btn--ghost edit-add-round" id="btn-add-round">Add another word</button>
@@ -805,6 +814,8 @@
       { answer: "HOME", clue: "What you are to me.", note: "" },
     ];
 
+    const DEFAULT_SUBTITLE = "Tinyversary Edition";
+
     const DEFAULT_CLOSING = {
       title: "Thank you for playing",
       body: [
@@ -826,8 +837,9 @@
       return String(word).toUpperCase().replace(/[^A-Z]/g, "");
     }
 
-    function cloneContent(rounds, closing) {
+    function cloneContent(rounds, closing, subtitle) {
       return {
+        subtitle: String(subtitle || DEFAULT_SUBTITLE),
         rounds: rounds.map((r) => ({
           answer: r.answer,
           clue: r.clue,
@@ -852,7 +864,9 @@
       if (!saved || !Array.isArray(saved.rounds) || !saved.closing) {
         return null;
       }
+      const subtitle = String(saved.subtitle || "").trim();
       return {
+        subtitle: subtitle || DEFAULT_SUBTITLE,
         rounds: normalizeRounds(saved.rounds).map((round, i) => ({
           ...round,
           backgroundImage: String(saved.rounds[i]?.backgroundImage || ""),
@@ -900,6 +914,7 @@
       if (hasLocalSave && local) return local;
       return parseSharedPayload({
         version: 1,
+        subtitle: DEFAULT_SUBTITLE,
         rounds: DEFAULT_ROUNDS,
         closing: DEFAULT_CLOSING,
       });
@@ -949,10 +964,11 @@
       return loaded[0];
     }
 
-    function saveContent(rounds, closing, updatedAt) {
+    function saveContent(rounds, closing, updatedAt, subtitle) {
       const payload = {
         version: 1,
         updatedAt: updatedAt || new Date().toISOString(),
+        subtitle: String(subtitle || DEFAULT_SUBTITLE),
         rounds,
         closing,
       };
@@ -1139,9 +1155,10 @@
       });
     }
 
-    let content = cloneContent(DEFAULT_ROUNDS, DEFAULT_CLOSING);
+    let content = cloneContent(DEFAULT_ROUNDS, DEFAULT_CLOSING, DEFAULT_SUBTITLE);
     let ROUNDS = content.rounds;
     let CLOSING = content.closing;
+    let SUBTITLE = content.subtitle;
 
     function scoreGuess(guess, answer) {
       const len = answer.length;
@@ -1239,6 +1256,8 @@
       editSyncStatus: document.getElementById("edit-sync-status"),
       openingLoading: document.getElementById("opening-loading"),
       openingNotice: document.getElementById("opening-notice"),
+      openingSub: document.getElementById("opening-sub"),
+      editSubtitle: document.getElementById("edit-subtitle"),
       editForm: document.getElementById("edit-form"),
       editRounds: document.getElementById("edit-rounds"),
       editClosingTitle: document.getElementById("edit-closing-title"),
@@ -1806,6 +1825,7 @@
         updateEditImagePreview(i);
       });
 
+      els.editSubtitle.value = SUBTITLE;
       els.editClosingTitle.value = CLOSING.title;
       els.editClosingBody.value = bodyToTextarea(CLOSING.body);
       els.btnAddRound.disabled = editDraftRounds.length >= MAX_ROUNDS;
@@ -1832,10 +1852,16 @@
       showScreen("edit");
     }
 
-    function applyContent(nextRounds, nextClosing) {
-      content = { rounds: nextRounds, closing: nextClosing };
+    function applyContent(nextRounds, nextClosing, nextSubtitle) {
+      content = {
+        rounds: nextRounds,
+        closing: nextClosing,
+        subtitle: String(nextSubtitle || DEFAULT_SUBTITLE),
+      };
       ROUNDS = content.rounds;
       CLOSING = content.closing;
+      SUBTITLE = content.subtitle;
+      els.openingSub.textContent = SUBTITLE;
     }
 
     function readEditForm() {
@@ -1852,10 +1878,14 @@
         body: textareaToBody(els.editClosingBody.value),
       };
 
-      return { rounds, closing };
+      return {
+        rounds,
+        closing,
+        subtitle: els.editSubtitle.value.trim(),
+      };
     }
 
-    function validateContent({ rounds, closing }) {
+    function validateContent({ rounds, closing, subtitle }) {
       if (!rounds.length) {
         return "Add at least one word.";
       }
@@ -1870,6 +1900,12 @@
         if (!clue) {
           return `Round ${i + 1}: add a description.`;
         }
+      }
+      if (!subtitle) {
+        return "Add a subtitle for the opening screen.";
+      }
+      if (subtitle.length > 60) {
+        return "The subtitle can be at most 60 characters.";
       }
       if (!closing.title) {
         return "Add a title for the last message.";
@@ -1894,14 +1930,14 @@
 
       let payload;
       try {
-        payload = saveContent(next.rounds, next.closing);
+        payload = saveContent(next.rounds, next.closing, null, next.subtitle);
       } catch (err) {
         showEditError(err.message || "Could not save your changes.");
         return;
       }
 
       if (!token) {
-        applyContent(next.rounds, next.closing);
+        applyContent(next.rounds, next.closing, next.subtitle);
         showOpeningNotice("Saved on this device only. Add a GitHub token under Edit to share it.");
         showScreen("opening");
         return;
@@ -1914,11 +1950,11 @@
         const message = err.message || "Could not publish shared content.";
         setSyncStatus(message, true);
         showEditError(`Saved on this device, but it was not shared. ${message}`);
-        applyContent(next.rounds, next.closing);
+        applyContent(next.rounds, next.closing, next.subtitle);
         return;
       }
 
-      applyContent(next.rounds, next.closing);
+      applyContent(next.rounds, next.closing, next.subtitle);
       showOpeningNotice("Shared. Anyone with the link will see it after they refresh.");
       showScreen("opening");
     }
@@ -1926,13 +1962,13 @@
     async function handleEditReset() {
       if (!window.confirm("Reset all words and messages to the original defaults?")) return;
       localStorage.removeItem(STORAGE_KEY);
-      const defaults = cloneContent(DEFAULT_ROUNDS, DEFAULT_CLOSING);
-      applyContent(normalizeRounds(defaults.rounds), defaults.closing);
+      const defaults = cloneContent(DEFAULT_ROUNDS, DEFAULT_CLOSING, DEFAULT_SUBTITLE);
+      applyContent(normalizeRounds(defaults.rounds), defaults.closing, defaults.subtitle);
 
       const token = getGitHubToken();
       if (token) {
         try {
-          const payload = saveContent(ROUNDS, CLOSING);
+          const payload = saveContent(ROUNDS, CLOSING, null, SUBTITLE);
           await uploadSharedContent(token, payload);
         } catch (err) {
           showEditError(err.message || "Reset locally, but sharing the reset failed.");
@@ -1957,8 +1993,8 @@
       const remote = await loadRemoteContent();
       const local = loadLocalContent();
       const next = resolveInitialContent(remote, local);
-      applyContent(next.rounds, next.closing);
-      saveContent(ROUNDS, CLOSING, next.updatedAt || new Date().toISOString());
+      applyContent(next.rounds, next.closing, next.subtitle);
+      saveContent(ROUNDS, CLOSING, next.updatedAt || new Date().toISOString(), SUBTITLE);
 
       els.openingLoading.hidden = true;
       els.btnStart.disabled = false;
